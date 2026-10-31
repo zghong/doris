@@ -31,6 +31,7 @@
 #include "core/types.h"
 #include "core/value/bitmap_value.h"
 #include "exprs/function/function_test_util.h"
+#include "util/defer_op.h"
 #include "util/url_coding.h"
 
 namespace doris {
@@ -615,6 +616,17 @@ ut_type::VARBINARY serialize_bitmap_to_binary(const BitmapValue& bitmap) {
 } // namespace
 
 TEST(function_bitmap_test, function_bitmap_to_binary) {
+    // This test flips two global configs. Restore them on every exit path: the UT binary runs
+    // many suites in one process, and a leaked enable_set_in_bitmap_value=false changes how a
+    // later suite's BITMAP column is serialized (SET vs BITMAP), which breaks the checked-in
+    // Segment goldens of SegmentFlusherTransformFormatTest.
+    const auto old_enable_set_in_bitmap_value = config::enable_set_in_bitmap_value;
+    const auto old_bitmap_serialize_version = config::bitmap_serialize_version;
+    Defer restore_bitmap_config {[&] {
+        config::enable_set_in_bitmap_value = old_enable_set_in_bitmap_value;
+        config::bitmap_serialize_version = old_bitmap_serialize_version;
+    }};
+
     config::Register::Field field("bool", "enable_set_in_bitmap_value",
                                   &config::enable_set_in_bitmap_value, "false", false);
     config::Register::_s_field_map->insert(
@@ -674,6 +686,14 @@ TEST(function_bitmap_test, function_bitmap_to_binary) {
 }
 
 TEST(function_bitmap_test, function_bitmap_from_binary) {
+    // Same global-config hygiene as function_bitmap_to_binary above.
+    const auto old_enable_set_in_bitmap_value = config::enable_set_in_bitmap_value;
+    const auto old_bitmap_serialize_version = config::bitmap_serialize_version;
+    Defer restore_bitmap_config {[&] {
+        config::enable_set_in_bitmap_value = old_enable_set_in_bitmap_value;
+        config::bitmap_serialize_version = old_bitmap_serialize_version;
+    }};
+
     config::Register::Field field("bool", "enable_set_in_bitmap_value",
                                   &config::enable_set_in_bitmap_value, "false", false);
     config::Register::_s_field_map->insert(
